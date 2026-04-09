@@ -57,7 +57,14 @@ def parse_duration_to_seconds(value: str) -> float:
 def main():
     print("Starting Cookie Clicker bot...")
     bot = CookieClicker()
-    print("Bot ready. Type 'pause', 'play', 'interval <time>', or 'stop' at any time.\n")
+    print(
+        "Bot ready. Commands:\n"
+        "  pause              pause clicking and store checks\n"
+        "  play               resume\n"
+        "  interval           show current store-check interval\n"
+        "  interval <time>    change it  e.g. 30  30s  2m  1h  2m30s\n"
+        "  stop               exit\n"
+    )
 
     running: list[bool] = [True]
     clicking: list[bool] = [True]
@@ -105,7 +112,14 @@ def main():
                     except ValueError as e:
                         print(f"Invalid interval: {e}. Examples: 30  30s  2m  1h  2m30s")
             else:
-                print("Commands: pause | play | interval <time> | stop")
+                print(
+                    "Commands:\n"
+                    "  pause              pause clicking and store checks\n"
+                    "  play               resume\n"
+                    "  interval           show current store-check interval\n"
+                    "  interval <time>    change it  e.g. 30  30s  2m  1h  2m30s\n"
+                    "  stop               exit"
+                )
 
     threading.Thread(target=click_forever, daemon=True).start()
     threading.Thread(target=command_listener, daemon=True).start()
