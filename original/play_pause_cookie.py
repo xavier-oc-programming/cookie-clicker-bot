@@ -30,7 +30,7 @@ HOVER_PAUSE = 0.2
 # SETUP
 # =========================================================
 options = uc.ChromeOptions()
-driver = uc.Chrome(options=options)
+driver = uc.Chrome(options=options, version_main=146)
 driver.get(URL)
 
 # ---------------------------------------------------------

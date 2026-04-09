@@ -1,3 +1,6 @@
+# Browser
+CHROME_VERSION = 146    # must match your installed Chrome major version
+
 # API / URLs
 URL = "https://orteil.dashnet.org/cookieclicker/"
 

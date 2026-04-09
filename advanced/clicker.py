@@ -21,7 +21,7 @@ class CookieClicker:
 
     def __init__(self):
         options = uc.ChromeOptions()
-        self.driver = uc.Chrome(options=options)
+        self.driver = uc.Chrome(options=options, version_main=config.CHROME_VERSION)
         self.actions = ActionChains(self.driver)
         self._setup()
 
