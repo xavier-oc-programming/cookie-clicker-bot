@@ -16,10 +16,18 @@ def main():
 
     running: list[bool] = [True]
     clicking: list[bool] = [True]
+    buff_until: list[float] = [0.0]     # timestamp when the current buff expires
+    click_allowed = threading.Event()   # cleared during store checks to pause clicking
+    click_allowed.set()
 
     def click_forever():
         while running[0]:
+            click_allowed.wait()        # blocks while store check is running
             if clicking[0]:
+                buff = bot.click_golden_cookies()
+                if buff:
+                    buff_until[0] = time.time() + buff
+                    print(f"\nGolden cookie! Buff active for ~{buff:.0f}s.")
                 bot.click()
             time.sleep(config.CLICK_SLEEP)
 
@@ -46,11 +54,22 @@ def main():
     while running[0]:
         if time.time() >= next_check:
             next_check = time.time() + config.CHECK_INTERVAL
-            print("\n=== Store check ===")
-            try:
-                bot.check_store()
-            except Exception as e:
-                print(f"Store check error (skipping): {e}")
+
+            remaining_buff = buff_until[0] - time.time()
+            if remaining_buff > 0:
+                print(f"\nBuff active ({remaining_buff:.0f}s left) — skipping store check.")
+            else:
+                # pause clicking so hovers aren't interrupted by the click thread
+                click_allowed.clear()
+                time.sleep(0.05)        # let the click thread finish its current iteration
+                try:
+                    cookies = bot.get_cookie_count()
+                    print(f"\n=== Store check === ({cookies:,.0f} cookies)")
+                    bot.check_store()
+                except Exception as e:
+                    print(f"Store check error (skipping): {e}")
+                finally:
+                    click_allowed.set() # always resume, even if check_store raised
 
         time.sleep(config.MAIN_POLL)
 

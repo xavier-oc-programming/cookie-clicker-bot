@@ -13,6 +13,9 @@ TOOLTIP_ID = "tooltip"
 TOOLTIP_BUILDING_DESC_CSS = "#tooltipBuilding .descriptionBlock"
 PRODUCT_PRICE_CSS = ".content .price"
 PRODUCT_OWNED_CSS = ".content .title.owned"
+PRODUCT_NAME_CSS = ".content .title.productName"
+GOLDEN_COOKIE_CSS = ".shimmer"
+BUFFS_CSS = "#buffs .buff"
 
 # Timing / rate limits
 CHECK_INTERVAL = 5      # seconds between store checks

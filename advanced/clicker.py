@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import ElementClickInterceptedException
 
 import config
 
@@ -67,11 +68,65 @@ class CookieClicker:
     # ------------------------------------------------------------------
 
     def click(self):
-        """Click the big cookie once. Silently ignores stale-element errors."""
+        """Click the big cookie. Falls back to JS if a shimmer intercepts the click."""
         try:
             self.big_cookie.click()
+        except ElementClickInterceptedException:
+            try:
+                self.driver.execute_script("arguments[0].click();", self.big_cookie)
+            except Exception:
+                pass
         except Exception:
             pass
+
+    def click_golden_cookies(self) -> float | None:
+        """
+        Click all golden/wrath cookies currently on screen.
+        Returns the longest active buff duration in seconds, or None if none found.
+        """
+        try:
+            shimmers = self.driver.find_elements(By.CSS_SELECTOR, config.GOLDEN_COOKIE_CSS)
+            if not shimmers:
+                return None
+            for s in shimmers:
+                try:
+                    s.click()
+                except Exception:
+                    try:
+                        self.driver.execute_script("arguments[0].click();", s)
+                    except Exception:
+                        pass
+            time.sleep(0.1)
+            return self._get_buff_duration()
+        except Exception:
+            return None
+
+    def _get_buff_duration(self) -> float | None:
+        """Return the longest active buff duration in seconds, or None."""
+        try:
+            buffs = self.driver.find_elements(By.CSS_SELECTOR, config.BUFFS_CSS)
+            longest = 0.0
+            for buff in buffs:
+                duration = None
+                raw = buff.get_attribute("data-timer")
+                if raw:
+                    try:
+                        duration = float(raw)
+                    except ValueError:
+                        pass
+                if duration is None:
+                    tooltip = buff.get_attribute("data-tooltip") or ""
+                    m = re.search(r"for\s+([\d.]+)\s+seconds", tooltip)
+                    if m:
+                        try:
+                            duration = float(m.group(1))
+                        except ValueError:
+                            pass
+                if duration is not None and duration > longest:
+                    longest = duration
+            return longest if longest > 0 else None
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # State reading
@@ -149,6 +204,7 @@ class CookieClicker:
         products = self.driver.find_elements(By.CSS_SELECTOR, config.PRODUCTS_CSS)
         cheapest_el, cheapest_price = None, float("inf")
 
+        cheapest_name = None
         for prod in products:
             if self._owned_count(prod) != 0:
                 continue
@@ -157,10 +213,12 @@ class CookieClicker:
                 continue
             if price <= cookies and price < cheapest_price:
                 cheapest_price, cheapest_el = price, prod
+                cheapest_name = self._product_name(prod)
 
         if cheapest_el is not None:
             try:
                 cheapest_el.click()
+                print(f"Discovery buy: {cheapest_name} for {cheapest_price:,.0f}")
                 return True
             except Exception:
                 pass
@@ -181,15 +239,23 @@ class CookieClicker:
             cps = self._tooltip_cps()
             if cps is None or cps <= 0:
                 continue
-            candidates.append({"el": prod, "price": price, "cps": cps,
-                                "payback": price / cps})
+            candidates.append({"el": prod, "name": self._product_name(prod),
+                                "price": price, "cps": cps, "payback": price / cps})
 
         if not candidates:
+            print("No quantifiable products this round.")
             return False
 
+        cookies = self.get_cookie_count()
         best = min(candidates, key=lambda x: x["payback"])
+        if cookies < best["price"]:
+            print(f"Best product ({best['name']}) not affordable: "
+                  f"need {best['price']:,.0f}, have {cookies:,.0f}")
+            return False
         try:
             best["el"].click()
+            print(f"Bought {best['name']}: price={best['price']:,.0f}, "
+                  f"CPS={best['cps']:.2f}, payback={best['payback']:.1f}s")
             return True
         except Exception:
             return False
@@ -207,6 +273,14 @@ class CookieClicker:
         except Exception:
             return 0
 
+    def _product_name(self, prod_el) -> str:
+        try:
+            return prod_el.find_element(
+                By.CSS_SELECTOR, config.PRODUCT_NAME_CSS
+            ).text.strip()
+        except Exception:
+            return "unknown"
+
     def _product_price(self, prod_el) -> float | None:
         try:
             return self._parse_number(
@@ -220,20 +294,37 @@ class CookieClicker:
             desc = self.driver.find_element(
                 By.CSS_SELECTOR, config.TOOLTIP_BUILDING_DESC_CSS
             )
-            m = re.search(r"([\d.,]+)\s+cookies per second", desc.text)
+            text = desc.text
+            # specific pattern first: "each X produces N cookies per second"
+            m = re.search(
+                r"each .* produces ([\d.,]+(?:\s+(?:thousand|million|billion|trillion|quadrillion))?)"
+                r" cookies per second",
+                text, flags=re.IGNORECASE,
+            )
             if m:
-                return float(m.group(1).replace(",", ""))
+                return self._parse_number(m.group(1))
+            # fallback: any "N cookies per second" in the tooltip
+            m = re.search(
+                r"([\d.,]+(?:\s+(?:thousand|million|billion|trillion|quadrillion))?)"
+                r" cookies per second",
+                text, flags=re.IGNORECASE,
+            )
+            if m:
+                return self._parse_number(m.group(1))
         except Exception:
             pass
         return None
 
     @staticmethod
     def _parse_number(text: str) -> float | None:
-        """Convert '14,970 cookies' or '65 million' into a float."""
+        """Convert '14,970 cookies', '65 million', '2.5 quadrillion' into a float."""
         if not text:
             return None
-        text = text.lower().replace(",", "").strip()
-        m = re.search(r"([\d.]+)\s*(thousand|million|billion|trillion)?", text)
+        text = text.replace("\n", " ").lower()
+        for thin_space in ("\u00a0", "\u202f", "\u2009"):
+            text = text.replace(thin_space, " ")
+        text = text.replace(",", "").strip()
+        m = re.search(r"([\d.]+)\s*(thousand|million|billion|trillion|quadrillion)?", text)
         if not m:
             return None
         num = float(m.group(1))
@@ -242,6 +333,7 @@ class CookieClicker:
             "million": 1_000_000,
             "billion": 1_000_000_000,
             "trillion": 1_000_000_000_000,
+            "quadrillion": 1_000_000_000_000_000,
         }
         num *= multipliers.get(m.group(2), 1)
         return num
