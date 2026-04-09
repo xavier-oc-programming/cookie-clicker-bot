@@ -1,6 +1,6 @@
 import re
 import time
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,9 +20,8 @@ class CookieClicker:
     """
 
     def __init__(self):
-        options = webdriver.ChromeOptions()
-        options.add_experimental_option("detach", True)
-        self.driver = webdriver.Chrome(options=options)
+        options = uc.ChromeOptions()
+        self.driver = uc.Chrome(options=options)
         self.actions = ActionChains(self.driver)
         self._setup()
 

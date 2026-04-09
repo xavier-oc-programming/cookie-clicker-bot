@@ -13,7 +13,7 @@ Features:
 import time
 import re
 import threading
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -29,9 +29,8 @@ HOVER_PAUSE = 0.2
 # =========================================================
 # SETUP
 # =========================================================
-options = webdriver.ChromeOptions()
-options.add_experimental_option("detach", True)
-driver = webdriver.Chrome(options=options)
+options = uc.ChromeOptions()
+driver = uc.Chrome(options=options)
 driver.get(URL)
 
 # ---------------------------------------------------------
