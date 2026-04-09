@@ -1,0 +1,6 @@
+# Python 3.10+
+selenium>=4.0.0
+
+# ChromeDriver must match your installed Chrome version.
+# Selenium 4.6+ includes Selenium Manager which downloads ChromeDriver automatically.
+# If on an older version, download manually: https://chromedriver.chromium.org/downloads
