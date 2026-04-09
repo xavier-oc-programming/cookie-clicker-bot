@@ -1,12 +1,12 @@
 # Cookie Clicker Bot
 
-A Selenium bot that automates Cookie Clicker: clicks the cookie, buys upgrades and buildings by CPS payback ratio, and accepts console commands to pause, play, or stop.
+A Selenium bot that automates Cookie Clicker: clicks the cookie, hunts golden cookies, buys upgrades and buildings by CPS payback ratio, and accepts console commands to pause, change the store-check interval, or stop.
 
-Cookie Clicker is a browser-based idle game created by Julien "Orteil" Thiennot in 2013. The entire premise is deceptively simple: there is a large cookie on the left side of the screen — you click it, you get cookies. Cookies are the game's single currency, used to buy buildings (Cursors, Grandmas, Farms, Mines, Factories, and so on) that produce more cookies automatically every second. Each building has a cookies-per-second (CPS) rate, and as your CPS climbs, an upgrade shop on the left unlocks one-time power-ups that multiply the output of specific buildings. The loop is: click → earn cookies → buy buildings → earn cookies faster → buy upgrades → earn cookies much faster → repeat, scaling from tens of cookies per second to trillions. The game never ends; the goal is simply to push your CPS as high as possible.
+Cookie Clicker is a browser-based idle game created by Julien "Orteil" Thiennot in 2013. The entire premise is deceptively simple: there is a large cookie on the left side of the screen — you click it, you get cookies. Cookies are the game's single currency, used to buy buildings (Cursors, Grandmas, Farms, Mines, Factories, and so on) that produce more cookies automatically every second. Each building has a cookies-per-second (CPS) rate, and as your CPS climbs, an upgrade shop on the left unlocks one-time power-ups that multiply the output of specific buildings. Golden cookies occasionally float across the screen; clicking one triggers a timed buff — Frenzy, Click Frenzy, or Lucky — that can multiply your CPS or grant a large cookie bonus for a short window. The loop is: click → earn cookies → buy buildings → earn cookies faster → buy upgrades → earn cookies much faster → catch golden cookie buffs → repeat, scaling from tens of cookies per second to trillions. The game never ends; the goal is simply to push your CPS as high as possible.
 
-Launch the bot and watch it open Chrome, accept the GDPR consent dialog, select English, and start hammering the big cookie in a background thread. Every 5 seconds it pauses to scan the shop: it first snaps up the most expensive available upgrade, then either buys the cheapest unowned building to unlock its CPS bonus (discovery rule), or — when all buildings are already owned — picks the one with the lowest price-to-CPS payback ratio. Type `pause` in the terminal to suspend clicking, `play` to resume, and `stop` to exit cleanly and print your final cookies-per-second score.
+Launch the bot and watch it open Chrome, accept the GDPR consent dialog, select English, and start hammering the big cookie in a background thread. Every 5 seconds it pauses to scan the shop: it first snaps up the most expensive available upgrade, then either buys the cheapest unowned building to unlock its CPS bonus (discovery rule), or — when all buildings are already owned — picks the one with the lowest price-to-CPS payback ratio. Golden cookies are clicked automatically; if a buff is active the store check is skipped so no cookies are wasted buying buildings during a multiplier. Type `pause` to suspend all activity, `play` to resume, `interval <time>` to change how often the store is checked, and `stop` to exit cleanly.
 
-There are two builds. The **original** build is the course script (`play_pause_cookie.py`) written as a single procedural file with all constants at the top — exactly as delivered on Day 48. The **advanced** build restructures it into an OOP `CookieClicker` class (`clicker.py`) driven by an orchestrator (`main.py`), with every magic number moved into `config.py`. Both builds implement the same game strategy; the difference is structure, testability, and maintainability.
+There are two builds. The **original** build is the course script (`play_pause_cookie.py`) written as a single procedural file with all constants at the top — exactly as delivered on Day 48. The **advanced** build restructures it into an OOP `CookieClicker` class (`clicker.py`) driven by an orchestrator (`main.py`), with every magic number moved into `config.py`. Both builds implement the same game strategy and the same anti-bot-detection protocol; the difference is structure, testability, and the extra features available in the advanced build.
 
 ```
                 COOKIE CLICKER BOT
@@ -81,11 +81,15 @@ Chrome must be installed. Selenium 4.6+ downloads ChromeDriver automatically via
 |---|---|---|
 | Structure | Single procedural file | OOP — `CookieClicker` class + orchestrator |
 | Constants | Inline at top of file | Centralised in `config.py` |
-| Threading | `threading.Thread` (bare) | Same, via `main.py` orchestrator |
-| Console commands | `pause` / `play` / `stop` | `pause` / `play` / `stop` |
-| Shop strategy | Upgrade → discovery → payback | Upgrade → discovery → payback |
+| Anti-bot protocol | CDP `navigator.webdriver` override + 3 ChromeOptions flags | Same |
+| Golden cookies | Not handled | Clicked automatically; store check skipped during buff |
+| Click interception | `except Exception: pass` | JS fallback on `ElementClickInterceptedException` |
+| Click/store race | Can conflict | `threading.Event` pauses click thread during store check |
+| Console commands | `pause` / `play` / `stop` | `pause` / `play` / `interval <time>` / `stop` |
+| Store-check interval | Fixed (`CHECK_INTERVAL = 5`) | Changeable at runtime with `interval` command |
+| Shop strategy | Upgrade → discovery → payback | Same |
+| Number parsing | Basic (thousand–trillion) | Extended (thin-space normalisation, quadrillion) |
 | Error handling | `except Exception: pass` inline | Exceptions bubble to `main.py`; loop continues |
-| Run mode | Infinite until `stop` | Infinite until `stop` |
 
 ---
 
@@ -108,24 +112,37 @@ Select a build to run:
   q. Quit
 ```
 
-Once a build is running:
+Once the advanced build is running:
 
 ```
-Bot ready. Type 'pause', 'play', or 'stop' at any time.
+Bot ready. Commands:
+  pause              pause clicking and store checks
+  play               resume
+  interval           show current store-check interval
+  interval <time>    change it  e.g. 30  30s  2m  1h  2m30s
+  stop               exit
 
-=== Store check ===
+=== Store check === (14,970 cookies)
 Bought upgrade for 100
-Discovery buy: bought new product for 15
+Discovery buy: Grandma for 100
+
+Golden cookie! Buff active for ~77s.
+Buff active (74s left) — skipping store check.
+
+interval 2m
+Store check interval set to 120.0s.
 
 pause
-Paused clicking.
+Paused.
 play
-Resumed clicking.
+Resumed.
 stop
 Stopping bot...
 
 Finished. Cookies per second: 42.3
 ```
+
+The original build supports `pause` / `play` / `stop` only.
 
 ---
 
@@ -133,45 +150,73 @@ Finished. Cookies per second: 42.3
 
 ```
 Launch → Open Chrome → Navigate to URL
+       → CDP: hide navigator.webdriver before page script runs
        → Accept GDPR consent popup
        → Select English language
        → Wait for #bigCookie element
 
-Background thread: click #bigCookie in tight loop (every 0.5 ms)
+Background thread 1 — click_forever:
+  wait for click_allowed event (cleared during store checks)
+  if not paused:
+    click_golden_cookies() → if buff acquired, record buff_until timestamp
+    click #bigCookie
+  sleep CLICK_SLEEP
 
-Every 5 s (CHECK_INTERVAL):
-  Read #cookies text → parse float
-  Hover over each enabled upgrade → read tooltip price
-    → click most expensive affordable upgrade
-  Scan #products for unowned (count == 0) affordable buildings
-    → click cheapest (discovery rule)
-  If no discovery: hover each product → read tooltip CPS
-    → sort by price / CPS → click lowest payback
+Background thread 2 — command_listener:
+  'pause'           → clicking = False  (halts clicking and store checks)
+  'play'            → clicking = True
+  'interval <time>' → check_interval = parse_duration_to_seconds(time)
+  'stop'            → running = False
+
+Main thread — store loop (every check_interval seconds):
+  if paused → skip
+  if buff active → skip (print remaining time)
+  else:
+    clear click_allowed  (pause click thread)
+    sleep 0.05           (let click thread finish current iteration)
+    read #cookies text → parse float
+    hover each enabled upgrade → read tooltip price
+      → click most expensive affordable upgrade
+    scan #products for unowned (count == 0) affordable buildings
+      → click cheapest (discovery rule)
+    if no discovery: hover each product → read tooltip CPS
+      → sort by price / CPS → click lowest payback
+    set click_allowed    (resume click thread)
 
 On 'stop' command:
-  Set running[0] = False → threads exit
-  Read #cookiesPerSecond → print final CPS
+  running = False → all threads exit
+  read #cookiesPerSecond → print final CPS
 ```
 
 ---
 
 ## 5. Features
 
-**Continuous cookie clicking** — A daemon thread clicks the big cookie as fast as possible (configurable `CLICK_SLEEP` to limit CPU usage). Clicking is entirely independent of the shop-check logic.
+**Continuous cookie clicking** — A daemon thread clicks the big cookie as fast as possible (`CLICK_SLEEP = 0.0005 s` to limit CPU usage). Clicking is entirely independent of the shop-check logic.
+
+**Anti-bot detection** — Both builds use three `ChromeOptions` flags (`--disable-blink-features=AutomationControlled`, `excludeSwitches: ["enable-automation"]`, `useAutomationExtension: False`) plus a CDP `Page.addScriptToEvaluateOnNewDocument` command that hides `navigator.webdriver` before the page's own JavaScript runs. This bypasses Cloudflare's bot-detection check on the Cookie Clicker site.
 
 **GDPR consent handling** — On first launch, Cookie Clicker shows a consent popup. The bot waits up to 10 seconds for it and dismisses it automatically; if it is absent it continues without error.
 
 **Language selection** — The bot explicitly clicks the English language button and waits 8 seconds for the full game UI to load before proceeding.
 
+**Golden cookie clicking (advanced)** — Before each cookie click, the bot scans for `.shimmer` elements (golden and wrath cookies). If any are found, they are clicked first. A JS fallback is used if the normal click is intercepted. The longest active buff duration is read back from `#buffs .buff` elements.
+
+**Buff-aware store skipping (advanced)** — If a golden cookie buff is active (Frenzy, Click Frenzy, Lucky), the store check is skipped for the duration of the buff so no cookies are spent buying buildings during a multiplier window.
+
+**Click thread pausing during store checks (advanced)** — A `threading.Event` (`click_allowed`) is cleared before each store check and set in the `finally` block after. This prevents the click thread from moving the mouse mid-hover and breaking tooltip reads.
+
 **Upgrade purchasing** — Every store check, the bot hovers over each enabled upgrade to read its tooltip price, then clicks the most expensive one it can find. This prioritises high-value upgrades. Falls back to the rightmost upgrade if tooltip parsing fails.
 
-**Discovery buying (advanced-only logic, present in both builds)** — If any building has never been bought (owned count == 0) and is affordable, the bot buys the cheapest such building first. Unlocking new building types reveals new upgrade slots and multipliers.
+**Discovery buying** — If any building has never been bought (owned count == 0) and is affordable, the bot buys the cheapest such building first. Unlocking new building types reveals new upgrade slots and multipliers.
 
 **Payback-ratio purchasing** — When all affordable buildings are already owned, the bot hovers each product to read its per-unit CPS from the tooltip, computes `price / CPS` (seconds to recoup the cost), and buys the building with the lowest payback time.
 
-**Interactive console commands** — A second daemon thread reads stdin continuously. Type `pause` to stop clicking (useful for manual intervention), `play` to resume, and `stop` to exit cleanly. Invalid commands print a reminder of available options.
+**Runtime interval command (advanced)** — Type `interval <time>` to change how often the store is checked without restarting. Accepts bare seconds (`30`), seconds with unit (`30s`), minutes (`2m`), hours (`1h`), or compound (`2m30s`). Type `interval` alone to print the current value.
 
-**Per-iteration error handling (advanced build)** — `check_store()` exceptions are caught in `main.py`'s loop and logged; a single DOM glitch does not kill the bot.
+**Interactive console commands** — A second daemon thread reads stdin continuously. `pause` suspends both clicking and store checks; `play` resumes; `stop` exits cleanly and prints the final CPS.
+
+**Per-iteration error handling (advanced)** — `check_store()` exceptions are caught in `main.py`'s loop and logged; a single stale element reference does not kill a long-running bot session.
 
 ---
 
@@ -191,13 +236,14 @@ python menu.py
 └── q → exit
 ```
 
-### b) Execution flow
+### b) Execution flow (advanced build)
 
 ```
 Start
   │
   ▼
 Open Chrome + navigate to URL
+CDP: navigator.webdriver = undefined
   │
   ▼
 GDPR popup present?
@@ -212,28 +258,30 @@ Language select present?
   ▼
 Wait for #bigCookie
   │
-  ├──[Thread 1: click_forever]──────────────────────────────────────┐
-  │   while running:                                                 │
-  │     if clicking: bot.click()                                     │
-  │     sleep 0.0005 s                                               │
-  │                                                                  │
-  ├──[Thread 2: command_listener]────────────────────────────────────┤
-  │   'pause' → clicking = False                                     │
-  │   'play'  → clicking = True                                      │
-  │   'stop'  → running = False                                      │
-  │                                                                  │
-  └──[Main thread: store loop]───────────────────────────────────────┘
-      every CHECK_INTERVAL seconds:
-        buy_best_upgrade()
-          hover each enabled upgrade → parse tooltip price
-          click most expensive → fallback to rightmost
-        buy_discovery_product()
-          find unowned affordable buildings → click cheapest
-          → if purchased, skip payback step
-        buy_best_payback_product()
-          hover each product → parse CPS from tooltip
-          compute price/CPS → click lowest payback
-        on exception → log and continue
+  ├──[Thread 1: click_forever]──────────────────────────────────────────┐
+  │   wait click_allowed event                                           │
+  │   if clicking:                                                       │
+  │     click_golden_cookies() → record buff_until if buff found        │
+  │     bot.click()                                                      │
+  │   sleep CLICK_SLEEP                                                  │
+  │                                                                      │
+  ├──[Thread 2: command_listener]─────────────────────────────────────── ┤
+  │   'pause'           → clicking = False                               │
+  │   'play'            → clicking = True                                │
+  │   'interval <time>' → check_interval = parse_duration_to_seconds()  │
+  │   'stop'            → running = False                                │
+  │                                                                      │
+  └──[Main thread: store loop]────────────────────────────────────────── ┘
+      every check_interval seconds:
+        if paused → skip
+        if buff active → skip (print remaining time)
+        else:
+          click_allowed.clear()
+          sleep 0.05
+          buy_best_upgrade()
+          buy_discovery_product()  → if bought, skip payback
+          buy_best_payback_product()
+          click_allowed.set()
 
       running = False → exit loop
       print final CPS
@@ -256,12 +304,12 @@ cookie-clicker-bot/
 │   └── COURSE_NOTES.md      # Original exercise description + concept list
 │
 ├── original/
-│   └── play_pause_cookie.py # Course script verbatim (v7)
+│   └── play_pause_cookie.py # Course script (procedural, single file)
 │
 └── advanced/
     ├── config.py            # All constants — URLs, selectors, timing
     ├── clicker.py           # CookieClicker class — WebDriver + game logic
-    └── main.py              # Orchestrator — threads, command loop, error handling
+    └── main.py              # Orchestrator — threads, interval command, error handling
 ```
 
 ---
@@ -272,19 +320,29 @@ cookie-clicker-bot/
 
 | Method | Returns | Description |
 |---|---|---|
-| `__init__()` | — | Opens Chrome, accepts consent, selects English, locates `#bigCookie` |
-| `click()` | `None` | Clicks the big cookie once; silently ignores stale-element errors |
+| `__init__()` | — | Opens Chrome, hides `navigator.webdriver`, accepts consent, selects English, locates `#bigCookie` |
+| `click()` | `None` | Clicks the big cookie; JS fallback on `ElementClickInterceptedException` |
+| `click_golden_cookies()` | `float \| None` | Clicks all `.shimmer` elements; returns longest buff duration or `None` |
+| `_get_buff_duration()` | `float \| None` | Reads longest active buff time from `#buffs .buff` elements |
 | `get_cookie_count()` | `float` | Reads and parses the current cookie counter; returns `0.0` on error |
 | `get_cps()` | `str` | Reads the cookies-per-second display string; returns `""` on error |
 | `check_store()` | `None` | Runs one full store-check cycle: upgrade → discovery → payback |
 | `_buy_best_upgrade()` | `bool` | Buys the highest-priced enabled upgrade; `True` if purchased |
+| `_upgrade_price(up_el)` | `float \| None` | Hovers an upgrade element and parses its tooltip price |
 | `_buy_discovery_product()` | `bool` | Buys cheapest unowned affordable building; `True` if purchased |
 | `_buy_best_payback_product()` | `bool` | Buys building with lowest price/CPS ratio; `True` if purchased |
-| `_upgrade_price(up_el)` | `float \| None` | Hovers an upgrade element and parses its tooltip price |
 | `_owned_count(prod_el)` | `int` | Reads owned count from a product element's title |
+| `_product_name(prod_el)` | `str` | Reads product name for console logging |
 | `_product_price(prod_el)` | `float \| None` | Reads price from a product element |
 | `_tooltip_cps()` | `float \| None` | Parses "N cookies per second" from the building tooltip |
-| `_parse_number(text)` | `float \| None` | Converts "65 million" or "14,970" strings to float |
+| `_parse_number(text)` | `float \| None` | Converts "65 million", "2.5 quadrillion", "14,970" strings to float |
+
+### `advanced/main.py`
+
+| Function | Description |
+|---|---|
+| `main()` | Entry point — creates bot, starts threads, runs store loop |
+| `parse_duration_to_seconds(value)` | Converts `"30"`, `"30s"`, `"2m"`, `"1h"`, `"2m30s"` to a float in seconds |
 
 ---
 
@@ -306,7 +364,10 @@ All constants live in [advanced/config.py](advanced/config.py).
 | `TOOLTIP_BUILDING_DESC_CSS` | `"#tooltipBuilding .descriptionBlock"` | CSS selector for building tooltip description |
 | `PRODUCT_PRICE_CSS` | `".content .price"` | CSS selector for product price within a product element |
 | `PRODUCT_OWNED_CSS` | `".content .title.owned"` | CSS selector for owned count within a product element |
-| `CHECK_INTERVAL` | `5` | Seconds between store checks |
+| `PRODUCT_NAME_CSS` | `".content .title.productName"` | CSS selector for product name within a product element |
+| `GOLDEN_COOKIE_CSS` | `".shimmer"` | CSS selector for golden/wrath cookies |
+| `BUFFS_CSS` | `"#buffs .buff"` | CSS selector for active buff elements |
+| `CHECK_INTERVAL` | `5` | Default seconds between store checks (changeable at runtime) |
 | `HOVER_PAUSE` | `0.2` | Seconds to wait after hovering for tooltip to render |
 | `CLICK_SLEEP` | `0.0005` | Seconds between cookie clicks (limits CPU load) |
 | `MAIN_POLL` | `0.05` | Seconds between main-loop iterations |
@@ -325,7 +386,7 @@ All constants live in [advanced/config.py](advanced/config.py).
 per second : 42.3
 ```
 
-First line only is parsed. Commas are stripped; multiplier suffixes (`thousand`, `million`, `billion`, `trillion`) are expanded to full floats.
+First line only is parsed. Commas are stripped; thin spaces are normalised; multiplier suffixes (`thousand`, `million`, `billion`, `trillion`, `quadrillion`) are expanded to full floats.
 
 ### Upgrade tooltip text (raw DOM, `#tooltip`)
 
@@ -340,16 +401,23 @@ The line containing `"cookies"` is parsed for the price.
 ### Building tooltip text (raw DOM, `#tooltipBuilding .descriptionBlock`)
 
 ```
-Each cursor produces 0.1 cookies per second
+Each grandma produces 4 cookies per second
 ```
 
-The pattern `([\d.,]+) cookies per second` is extracted as the per-unit CPS.
+Two patterns are tried in order:
+1. `each .* produces N cookies per second` — specific per-unit CPS
+2. `N cookies per second` — fallback for any match in the description
+
+### Buff element (raw DOM, `#buffs .buff`)
+
+Buff duration is read from `data-timer` attribute first (raw seconds as a float string), then falls back to parsing `"for N seconds"` from `data-tooltip`.
 
 ### Product candidate dict (internal, `_buy_best_payback_product`)
 
 ```python
 {
     "el":      <WebElement>,   # Selenium element reference
+    "name":    str,            # product name for console logging
     "price":   float,          # cost in cookies
     "cps":     float,          # cookies per second this building produces
     "payback": float,          # price / cps — seconds to recoup cost
@@ -360,27 +428,25 @@ The pattern `([\d.,]+) cookies per second` is extracted as the per-unit CPS.
 
 ## 11. Design decisions
 
-**`config.py` — zero magic numbers.** Every URL, selector, and timing value has a name. When Cookie Clicker updates its CSS classes (it has), one-line fixes in `config.py` propagate everywhere instead of requiring a grep-and-replace across files.
+**CDP `navigator.webdriver` override before `driver.get()`.** `Page.addScriptToEvaluateOnNewDocument` registers a script that runs on every new document load before the page's own JavaScript. Calling it after `driver.get()` would be too late — the page script would have already read `navigator.webdriver = true`. Both builds register it immediately after `webdriver.Chrome()`.
+
+**`config.py` — zero magic numbers.** Every URL, selector, and timing value has a name. When Cookie Clicker updates its CSS classes, one-line fixes in `config.py` propagate everywhere instead of requiring a grep-and-replace across files.
 
 **Separate `CookieClicker` class.** All DOM interaction is isolated in one place. The threading model, command listener, and loop timing in `main.py` can be changed without touching the game logic, and vice versa.
 
-**`clicker.py` raises exceptions instead of `sys.exit()`.** The class has no opinion on how failures should be handled. `main.py` catches `check_store()` exceptions per iteration and logs them — a single stale element reference does not kill a long-running bot session.
+**`threading.Event` instead of a bare flag for click pausing.** Using a boolean flag to pause the click thread during store checks would require the click thread to poll it in a tight loop. `click_allowed.wait()` blocks with zero CPU until the event is set, and `click_allowed.clear()` + `time.sleep(0.05)` guarantees the click thread has finished its current iteration before hovering begins.
+
+**`check_interval` as a one-element list.** The interval is mutated by `command_listener`, which is a closure. A one-element list gives the closure a mutable cell without `nonlocal`. The main loop always reads `check_interval[0]` so changes take effect on the next cycle.
+
+**Buff skipping over store checks.** During a Frenzy or Click Frenzy buff, every cookie click is worth several times its normal value. Running a store check (which pauses clicking for several seconds of hovering) during a buff would waste the multiplier window. The bot reads the buff expiry time and skips store checks until it passes.
+
+**`clicker.py` raises exceptions instead of `sys.exit()`.** The class has no opinion on how failures should be handled. `main.py` catches `check_store()` exceptions per iteration and logs them — a single stale element reference does not kill a long-running session.
 
 **`sys.path.insert` in `main.py`.** Allows both `python advanced/main.py` (from the project root) and `subprocess.run` via `menu.py` to resolve sibling imports without a package install.
 
-**`subprocess.run` + `cwd=path.parent` in `menu.py`.** Each build runs in its own directory, so relative imports and any future file-path operations resolve correctly regardless of where `menu.py` is launched from.
-
-**`while True` in `menu.py` vs recursion.** Recursion would grow the call stack with every menu return. The loop approach is flat and runs indefinitely without risk of a stack overflow.
-
-**Console cleared before every menu render, not after invalid input.** Invalid input prints an error message; clearing immediately would erase it before the user can read it. `clear = False` on the invalid-input path preserves the message for one cycle.
-
-**`input("\nPress Enter to return to menu...")` after `subprocess.run`.** The bot process may print errors as it exits. The pause keeps them visible so the user can read them before the screen clears on the next menu render.
+**`subprocess.run` + `cwd=path.parent` in `menu.py`.** Each build runs in its own directory so relative imports and any future file-path operations resolve correctly regardless of where `menu.py` is launched from.
 
 **`running` and `clicking` as one-element lists.** Both are mutated inside `command_listener`, which is a closure. Python closures can read enclosing-scope variables but cannot rebind them without `nonlocal`. A one-element list (`running: list[bool] = [True]`) gives the closure a mutable cell without requiring `nonlocal` declarations.
-
-**`time.sleep(CLICK_SLEEP)` in the clicking thread.** Without any sleep, the clicking thread saturates one CPU core. `0.0005 s` (0.5 ms) keeps CPU usage reasonable while still clicking ~2,000 times per second — far faster than any human.
-
-**`try/except per store-check iteration, not around the whole loop.** Wrapping the entire `while running` loop in a single try/except would silently swallow errors and make debugging impossible. Per-iteration handling logs the error and continues, keeping the bot alive through transient DOM issues.
 
 ---
 
@@ -401,7 +467,10 @@ Built as Day 48 of 100 Days of Code by Dr. Angela Yu.
 - OOP encapsulation — `CookieClicker` class with clear public/private boundary
 - Configuration module pattern — all constants in one place
 - Exception propagation — modules raise, orchestrator handles
+- `threading.Event` for fine-grained thread coordination
 - Mutable closure cells as an alternative to `nonlocal`
+- Runtime-configurable parameters via console commands
+- Human-friendly duration parsing (`parse_duration_to_seconds`)
 
 See [docs/COURSE_NOTES.md](docs/COURSE_NOTES.md) for full concept breakdown.
 
@@ -411,9 +480,9 @@ See [docs/COURSE_NOTES.md](docs/COURSE_NOTES.md) for full concept breakdown.
 
 | Module | Used in | Purpose |
 |---|---|---|
-| `selenium` | both builds | WebDriver, element location, `ActionChains`, `WebDriverWait` |
-| `threading` | both builds | Background clicking thread and command-listener thread |
-| `re` | both builds | Parse human-readable cookie counts and CPS values from DOM text |
+| `selenium` | both builds | WebDriver, element location, `ActionChains`, `WebDriverWait`, CDP commands |
+| `threading` | both builds | Background clicking thread, command-listener thread, `Event` for click pausing |
+| `re` | both builds | Parse human-readable cookie counts, CPS values, and duration strings from text |
 | `time` | both builds | `sleep` for rate-limiting, tooltip waits, and language-load wait |
 | `subprocess` | `menu.py` | Launch each build as a child process |
 | `sys` | `menu.py`, `advanced/main.py` | `sys.executable` for correct Python path; `sys.path.insert` for imports |
