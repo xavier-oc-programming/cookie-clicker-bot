@@ -6,7 +6,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException
-from selenium_stealth import stealth
 
 import config
 
@@ -27,15 +26,9 @@ class CookieClicker:
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
         self.driver = webdriver.Chrome(options=options)
-        stealth(
-            self.driver,
-            languages=["en-US", "en"],
-            vendor="Google Inc.",
-            platform="MacIntel",
-            webgl_vendor="Apple Inc.",
-            renderer="Apple M1",
-            fix_hairline=True,
-        )
+        self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        })
         self.actions = ActionChains(self.driver)
         self._setup()
 

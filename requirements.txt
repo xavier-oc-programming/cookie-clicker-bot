@@ -1,13 +1,14 @@
 # Python 3.10+
 selenium>=4.0.0
-selenium-stealth>=1.0.6
 
 # Selenium 4.6+ includes Selenium Manager which automatically downloads the
 # correct ChromeDriver for your installed Chrome version — no manual setup needed.
 #
-# selenium-stealth patches WebGL vendor/renderer, navigator.plugins, languages,
-# hairline canvas, and chrome runtime — a wider set of fingerprints than the
-# single navigator.webdriver override, making the browser harder for Cloudflare
-# to distinguish from a real user session.
+# Bot detection is handled via ChromeOptions flags:
+#   --disable-blink-features=AutomationControlled
+#   excludeSwitches: enable-automation
+#   useAutomationExtension: False
+# plus a CDP Page.addScriptToEvaluateOnNewDocument call that hides
+# navigator.webdriver before the page script runs.
 # undetected-chromedriver is NOT used: it produces patched binaries that macOS
 # Gatekeeper kills on Apple Silicon (SIGKILL, exit code 137).
