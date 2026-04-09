@@ -14,6 +14,7 @@ import time
 import re
 import threading
 import undetected_chromedriver as uc
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -29,8 +30,9 @@ HOVER_PAUSE = 0.2
 # =========================================================
 # SETUP
 # =========================================================
+_driver_path = ChromeDriverManager(driver_version="146").install()
 options = uc.ChromeOptions()
-driver = uc.Chrome(options=options, version_main=146)
+driver = uc.Chrome(options=options, driver_executable_path=_driver_path)
 driver.get(URL)
 
 # ---------------------------------------------------------

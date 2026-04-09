@@ -1,8 +1,10 @@
 # Python 3.10+
 selenium>=4.0.0
 undetected-chromedriver>=3.5.0
+webdriver-manager>=4.0.0
 
-# undetected-chromedriver patches the Chrome binary to bypass bot-detection checks
+# undetected-chromedriver patches ChromeDriver to bypass bot-detection checks
 # (navigator.webdriver, automation flags) that Cookie Clicker's Cloudflare layer
 # now uses to block standard Selenium sessions.
-# It manages its own ChromeDriver download — no manual setup required.
+# webdriver-manager handles the ChromeDriver download; the path is passed directly
+# to uc.Chrome via driver_executable_path, bypassing uc's own downloader.

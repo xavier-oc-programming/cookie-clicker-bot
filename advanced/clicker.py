@@ -1,6 +1,7 @@
 import re
 import time
 import undetected_chromedriver as uc
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,8 +21,11 @@ class CookieClicker:
     """
 
     def __init__(self):
+        driver_path = ChromeDriverManager(
+            driver_version=str(config.CHROME_VERSION)
+        ).install()
         options = uc.ChromeOptions()
-        self.driver = uc.Chrome(options=options, version_main=config.CHROME_VERSION)
+        self.driver = uc.Chrome(options=options, driver_executable_path=driver_path)
         self.actions = ActionChains(self.driver)
         self._setup()
 
