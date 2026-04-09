@@ -1,10 +1,9 @@
 # Python 3.10+
 selenium>=4.0.0
-undetected-chromedriver>=3.5.0
-webdriver-manager>=4.0.0
 
-# undetected-chromedriver patches ChromeDriver to bypass bot-detection checks
-# (navigator.webdriver, automation flags) that Cookie Clicker's Cloudflare layer
-# now uses to block standard Selenium sessions.
-# webdriver-manager handles the ChromeDriver download; the path is passed directly
-# to uc.Chrome via driver_executable_path, bypassing uc's own downloader.
+# Selenium 4.6+ includes Selenium Manager which automatically downloads the
+# correct ChromeDriver for your installed Chrome version — no manual setup needed.
+#
+# Bot-detection is handled via CDP flags (disable-blink-features=AutomationControlled
+# + navigator.webdriver override) rather than undetected-chromedriver, which
+# produces patched binaries that macOS Gatekeeper kills on Apple Silicon.

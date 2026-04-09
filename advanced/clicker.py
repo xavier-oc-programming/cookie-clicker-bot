@@ -1,7 +1,6 @@
 import re
 import time
-import undetected_chromedriver as uc
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
@@ -21,11 +20,14 @@ class CookieClicker:
     """
 
     def __init__(self):
-        driver_path = ChromeDriverManager(
-            driver_version=str(config.CHROME_VERSION)
-        ).install()
-        options = uc.ChromeOptions()
-        self.driver = uc.Chrome(options=options, driver_executable_path=driver_path)
+        options = webdriver.ChromeOptions()
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        self.driver = webdriver.Chrome(options=options)
+        self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        })
         self.actions = ActionChains(self.driver)
         self._setup()
 
