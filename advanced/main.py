@@ -55,8 +55,9 @@ def main():
         if time.time() >= next_check:
             next_check = time.time() + config.CHECK_INTERVAL
 
-            remaining_buff = buff_until[0] - time.time()
-            if remaining_buff > 0:
+            if not clicking[0]:
+                pass  # paused — skip store check
+            elif (remaining_buff := buff_until[0] - time.time()) > 0:
                 print(f"\nBuff active ({remaining_buff:.0f}s left) — skipping store check.")
             else:
                 # pause clicking so hovers aren't interrupted by the click thread
